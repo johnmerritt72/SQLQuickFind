@@ -6,7 +6,7 @@ Type part of an object name in the toolbar, press Enter, and the matching object
 
 ## Why
 
-The default SSMS workflow for "find that proc named `usp_GetSomething`" is: expand the right server → expand the right database (which you may have forgotten) → expand `Programmability\Stored Procedures` → scroll. In a shop with hundreds of databases this is slow.
+The default SSMS workflow for "find that proc named `usp_GetSomething`" is: expand the right server → expand the right database (which you may have forgotten) → expand `Programmability\Stored Procedures` → scroll. In a shop with hundreds of objects/stored procedures this is slow.
 
 SQLQuickFind caches every user proc and function name on a server (one-time, persisted to disk) and gives you instant substring search across them all.
 
@@ -14,7 +14,6 @@ SQLQuickFind caches every user proc and function name on a server (one-time, per
 
 - **SQL Server Management Studio 22** (Windows, x64). The manifest targets SSMS 22 only — SSMS 21 and earlier are not supported.
 - **.NET Framework 4.7.2** or later (ships with SSMS 22).
-- A user with permission to read `sys.objects` and `sys.databases` on the server.
 
 ## Install
 
@@ -79,7 +78,6 @@ Deleting these files is safe — they'll be regenerated as needed.
 
 ## Known limitations
 
-- Requires a query window to be open. If you only have Object Explorer connected (no query window), SQLQuickFind shows "Open a query window first" instead of a connection picker. This may change in a future release.
 - Procs and functions only; no support yet for tables, views, triggers, synonyms.
 - The autocomplete dropdown is anchored to the toolbar's underlying WPF textbox via runtime visual-tree walking. If a future SSMS update changes that tree shape, autocomplete might silently stop working — the toolbar-attach log will diagnose what was found.
 

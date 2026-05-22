@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable"
+              xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+
+  <Commands package="guidSQLQuickFindPackage">
+
+    <Menus>
+      <Menu guid="guidSQLQuickFindCmdSet" id="SQLQuickFindToolbar" type="Toolbar" priority="0x0000">
+        <CommandFlag>DefaultDocked</CommandFlag>
+        <Strings>
+          <ButtonText>SQLQuickFind</ButtonText>
+          <CommandName>SQLQuickFind</CommandName>
+        </Strings>
+      </Menu>
+    </Menus>
+
+    <Groups>
+      <Group guid="guidSQLQuickFindCmdSet" id="SQLQuickFindToolbarGroup" priority="0x0000">
+        <Parent guid="guidSQLQuickFindCmdSet" id="SQLQuickFindToolbar" />
+      </Group>
+    </Groups>
+
+    <Combos>
+      <!-- DynamicCombo: user can type, dropdown is populated by FillList handler -->
+      <Combo guid="guidSQLQuickFindCmdSet"
+             id="cmdidSearchCombo"
+             priority="0x0100"
+             type="DynamicCombo"
+             idCommandList="cmdidSearchComboGetList"
+             defaultWidth="250">
+        <Parent guid="guidSQLQuickFindCmdSet" id="SQLQuickFindToolbarGroup" />
+        <CommandFlag>IconAndText</CommandFlag>
+        <CommandFlag>CommandWellOnly</CommandFlag>
+        <CommandFlag>NoKeyCustomize</CommandFlag>
+        <CommandFlag>NoButtonCustomize</CommandFlag>
+        <Strings>
+          <ButtonText>Find proc/function:</ButtonText>
+          <CommandName>SQLQuickFind.Search</CommandName>
+          <CanonicalName>SQLQuickFind.Search</CanonicalName>
+          <ToolTipText>Type a stored procedure or function name and press Enter.</ToolTipText>
+        </Strings>
+      </Combo>
+    </Combos>
+
+    <Buttons>
+      <Button guid="guidSQLQuickFindCmdSet" id="cmdidRefresh" priority="0x0200" type="Button">
+        <Parent guid="guidSQLQuickFindCmdSet" id="SQLQuickFindToolbarGroup" />
+        <CommandFlag>TextOnly</CommandFlag>
+        <Strings>
+          <ButtonText>Refresh</ButtonText>
+          <CommandName>SQLQuickFind.Refresh</CommandName>
+          <CanonicalName>SQLQuickFind.Refresh</CanonicalName>
+          <ToolTipText>Rebuild the object cache for the current server.</ToolTipText>
+        </Strings>
+      </Button>
+    </Buttons>
+
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidSQLQuickFindPackage" value="{7f1819ae-eeaa-4151-9b0a-9bd5277cbfc3}" />
+    <GuidSymbol name="guidSQLQuickFindCmdSet" value="{ccbc21be-a1e6-4199-8faf-b4a22948f03c}">
+      <IDSymbol name="SQLQuickFindToolbar"      value="0x1000" />
+      <IDSymbol name="SQLQuickFindToolbarGroup" value="0x1010" />
+      <IDSymbol name="cmdidSearchCombo"         value="0x0100" />
+      <IDSymbol name="cmdidSearchComboGetList"  value="0x0101" />
+      <IDSymbol name="cmdidRefresh"             value="0x0102" />
+    </GuidSymbol>
+  </Symbols>
+
+</CommandTable>

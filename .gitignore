@@ -107,8 +107,11 @@ csx/
 .idea/
 *.sln.iml
 
-# Built VSIX (release artifacts; uploaded manually to GitHub Releases)
-*.vsix
+# Built VSIX (release artifacts; uploaded manually to GitHub Releases).
+# Scoped to bin/ output dirs only — bare *.vsix would also exclude any
+# directory whose name ends in ".vsix" (e.g. the SQLQuickFind.Vsix
+# project folder), silently dropping the source from the repo.
+**/[Bb]in/**/*.vsix
 
 # Build output debug files
 *.pdb
