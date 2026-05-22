@@ -28,7 +28,7 @@ The toolbar has three things: a search textbox labelled **Find proc/function:**,
 
 ### First search on a new server
 
-Open a query window connected to any database on the server. The first time you search, SQLQuickFind enumerates user databases and reads `sys.objects` from each — typically a few seconds for a hundred databases. The cache is persisted under `%LOCALAPPDATA%\SQLQuickFind\cache\` and reused across SSMS sessions.
+Make a connection to any database. The first time you search, SQLQuickFind enumerates user databases and reads `sys.objects` from each — typically a few seconds for a hundred databases. The cache is persisted under `%LOCALAPPDATA%\SQLQuickFind\cache\` and reused across SSMS sessions.
 
 ### Searching
 
