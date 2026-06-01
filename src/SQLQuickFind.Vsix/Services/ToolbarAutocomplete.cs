@@ -11,6 +11,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
 
 namespace SQLQuickFind.Services
@@ -36,6 +37,22 @@ namespace SQLQuickFind.Services
         private static ComboBox _ancestorCombo;
         private static bool     _autocompleteAttached;
         private static bool     _suppressTextChanged;
+        // True from the moment a result is committed until the user genuinely interacts
+        // again (a keystroke, or focus leaving and the combo settling). The native VS
+        // DynamicCombo emits a *deferred* empty-text TextChanged echoing our programmatic
+        // clear; that echo escapes the synchronous _suppressTextChanged window and would
+        // otherwise re-open the popup as orphaned history. This flag covers that window.
+        private static bool     _committing;
+
+        // Themed brushes for the dropdown. Kept as mutable (non-frozen) instances so the
+        // Border/ListBox/item-template that reference them update live when we recolour them
+        // on a theme change — see RebuildThemeBrushes / OnThemeChanged.
+        private static readonly SolidColorBrush _bgBrush      = new SolidColorBrush();
+        private static readonly SolidColorBrush _textBrush    = new SolidColorBrush();
+        private static readonly SolidColorBrush _borderBrush  = new SolidColorBrush();
+        private static readonly SolidColorBrush _selBgBrush   = new SolidColorBrush();
+        private static readonly SolidColorBrush _selTextBrush = new SolidColorBrush();
+        private static bool _themeHooked;
 
         // Tooltip state
         private static bool _tooltipAttached;
@@ -259,17 +276,33 @@ namespace SQLQuickFind.Services
 
         private static void CreatePopup()
         {
+            // Pull the current SSMS theme colours and keep them refreshed on theme switches.
+            RebuildThemeBrushes();
+            if (!_themeHooked)
+            {
+                VSColorTheme.ThemeChanged += OnThemeChanged;
+                _themeHooked = true;
+            }
+
             _list = new ListBox
             {
                 DisplayMemberPath = "Display",
                 MaxHeight = 300,
                 MinWidth  = 360,
-                FontSize  = 12
+                FontSize  = 12,
+                // Transparent so the rounded, themed Border behind it shows through —
+                // a square ListBox background would otherwise poke past the rounded corners.
+                Background      = Brushes.Transparent,
+                Foreground      = _textBrush,
+                BorderThickness = new Thickness(0)
             };
             // Attach the click handler directly on every ListBoxItem via container style.
             // This is more reliable inside a WPF Popup than wiring at the ListBox level,
             // because the Popup's own HWND can mis-route some bubbling events.
             var itemStyle = new Style(typeof(ListBoxItem));
+            itemStyle.Setters.Add(new Setter(Control.ForegroundProperty, _textBrush));
+            itemStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+            itemStyle.Setters.Add(new Setter(Control.TemplateProperty, BuildItemTemplate()));
             itemStyle.Setters.Add(new EventSetter
             {
                 Event   = ListBoxItem.MouseLeftButtonUpEvent,
@@ -290,9 +323,12 @@ namespace SQLQuickFind.Services
 
             var border = new Border
             {
-                BorderBrush     = SystemColors.ActiveBorderBrush,
+                BorderBrush     = _borderBrush,
                 BorderThickness = new Thickness(1),
-                Background      = SystemColors.WindowBrush,
+                Background      = _bgBrush,
+                CornerRadius    = new CornerRadius(5),
+                Padding         = new Thickness(2),
+                SnapsToDevicePixels = true,
                 Child           = _list
             };
 
@@ -309,10 +345,93 @@ namespace SQLQuickFind.Services
             };
         }
 
+        // ---- Theming ----
+
+        // Recolours the shared brushes from the active VS/SSMS theme. Because the brushes are
+        // mutable instances referenced by the live visual tree, changing their .Color here
+        // updates the dropdown in place — no rebuild of the popup needed.
+        private static void RebuildThemeBrushes()
+        {
+            _bgBrush.Color      = ThemedColor(EnvironmentColors.ToolWindowBackgroundColorKey,        Color.FromRgb(0x25, 0x25, 0x26));
+            _textBrush.Color    = ThemedColor(EnvironmentColors.ToolWindowTextColorKey,              Color.FromRgb(0xF1, 0xF1, 0xF1));
+            _borderBrush.Color  = ThemedColor(EnvironmentColors.ToolWindowBorderColorKey,            Color.FromRgb(0x3F, 0x3F, 0x46));
+            _selBgBrush.Color   = ThemedColor(EnvironmentColors.CommandBarMenuItemMouseOverColorKey, Color.FromRgb(0x3E, 0x3E, 0x40));
+            _selTextBrush.Color = ThemedColor(EnvironmentColors.CommandBarMenuItemMouseOverTextColorKey, Color.FromRgb(0xFF, 0xFF, 0xFF));
+        }
+
+        private static Color ThemedColor(ThemeResourceKey key, Color fallback)
+        {
+            try
+            {
+                var c = VSColorTheme.GetThemedColor(key);
+                return Color.FromArgb(c.A, c.R, c.G, c.B);
+            }
+            catch { return fallback; }
+        }
+
+        private static void OnThemeChanged(ThemeChangedEventArgs e)
+        {
+            try { RebuildThemeBrushes(); } catch { }
+        }
+
+        // ListBoxItem template: a rounded Border that fills with the themed highlight brush on
+        // selection or hover. The existing click EventSetters live on the container Style, not
+        // here, so the commit-on-click behaviour is unaffected.
+        private static ControlTemplate BuildItemTemplate()
+        {
+            var bd = new FrameworkElementFactory(typeof(Border), "Bd");
+            bd.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+            bd.SetValue(Border.PaddingProperty, new Thickness(6, 2, 6, 2));
+            bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(3));
+            bd.SetValue(Border.SnapsToDevicePixelsProperty, true);
+
+            var cp = new FrameworkElementFactory(typeof(ContentPresenter));
+            cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            bd.AppendChild(cp);
+
+            var template = new ControlTemplate(typeof(ListBoxItem)) { VisualTree = bd };
+
+            var selected = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
+            selected.Setters.Add(new Setter(Border.BackgroundProperty, _selBgBrush, "Bd"));
+            selected.Setters.Add(new Setter(Control.ForegroundProperty, _selTextBrush));
+            template.Triggers.Add(selected);
+
+            var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            hover.Setters.Add(new Setter(Border.BackgroundProperty, _selBgBrush, "Bd"));
+            hover.Setters.Add(new Setter(Control.ForegroundProperty, _selTextBrush));
+            template.Triggers.Add(hover);
+
+            return template;
+        }
+
+        // The popup may only be open while the user is actually working in the toolbar box
+        // (focus is in the textbox or in the popup itself) and we are not mid-commit. This is
+        // the safety net that stops the popup from ever lingering as an orphan after a proc
+        // opens and keyboard focus has moved to the editor.
+        private static bool CanShowPopup()
+        {
+            if (_committing) return false;
+            if (_textBox == null || _popup == null) return false;
+            return _textBox.IsKeyboardFocusWithin || _popup.IsKeyboardFocusWithin;
+        }
+
+        private static void OpenPopup()
+        {
+            if (CanShowPopup())
+            {
+                if (!_popup.IsOpen) _popup.IsOpen = true;
+            }
+            else
+            {
+                _popup.IsOpen = false;
+            }
+        }
+
         private static void OnTextBoxGotFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
             // When the textbox is focused with empty text, show history in our popup.
             Log($"OnTextBoxGotFocus: text='{_textBox.Text ?? ""}'");
+            if (_committing) return;
             if (string.IsNullOrEmpty(_textBox.Text)) ShowHistory();
         }
 
@@ -343,6 +462,9 @@ namespace SQLQuickFind.Services
         private static void OnTextChanged(object sender, TextChangedEventArgs e)
         {
             if (_suppressTextChanged) return;
+            // Ignore the native combo's deferred echo of our programmatic clear (and any
+            // other text churn it generates) until the user genuinely interacts again.
+            if (_committing) { _popup.IsOpen = false; return; }
             try
             {
                 string text = _textBox.Text ?? "";
@@ -363,7 +485,7 @@ namespace SQLQuickFind.Services
                 if (matches.Count > 0)
                 {
                     _list.SelectedIndex = 0;
-                    if (!_popup.IsOpen) _popup.IsOpen = true;
+                    OpenPopup();
                 }
                 else
                 {
@@ -375,6 +497,7 @@ namespace SQLQuickFind.Services
 
         private static void ShowHistory()
         {
+            if (_committing) { _popup.IsOpen = false; return; }
             var pkg = SQLQuickFindPackage.Instance;
             var history = pkg?.History?.GetAll();
             Log($"ShowHistory: history count = {history?.Count ?? -1}");
@@ -390,12 +513,16 @@ namespace SQLQuickFind.Services
             }).ToList();
             _list.ItemsSource   = items;
             _list.SelectedIndex = 0;
-            if (!_popup.IsOpen) _popup.IsOpen = true;
+            OpenPopup();
             Log($"ShowHistory: popup IsOpen={_popup.IsOpen}");
         }
 
         private static void OnTextBoxKeyDown(object sender, KeyEventArgs e)
         {
+            // A keystroke in the box means the user is actively driving it again, so the
+            // post-commit suppression window is over. This fires before the resulting
+            // TextChanged, so normal search/history behaviour resumes on this very key.
+            _committing = false;
             if (e.Key == Key.Down && _popup.IsOpen && _list.Items.Count > 0)
             {
                 _list.Focus();
@@ -426,6 +553,11 @@ namespace SQLQuickFind.Services
                     if (_popup.IsKeyboardFocusWithin) return;
                     if (_textBox != null && _textBox.IsKeyboardFocusWithin) return;
                     _popup.IsOpen = false;
+                    // Focus has genuinely left the toolbar. Re-enable history-on-refocus, but
+                    // only after any pending combo-driven TextChanged bursts (Input priority)
+                    // have drained, so they don't sneak the popup back open first.
+                    Application.Current?.Dispatcher.BeginInvoke(
+                        (Action)(() => _committing = false), DispatcherPriority.Background);
                 }
                 catch { }
             }), DispatcherPriority.Input);
@@ -486,6 +618,7 @@ namespace SQLQuickFind.Services
         {
             try
             {
+                _committing = true;
                 _popup.IsOpen = false;
                 var pkg = SQLQuickFindPackage.Instance;
                 var active = ConnectionContext.GetActiveConnection();
@@ -506,6 +639,7 @@ namespace SQLQuickFind.Services
         {
             try
             {
+                _committing = true;
                 _popup.IsOpen = false;
                 var pkg = SQLQuickFindPackage.Instance;
                 if (pkg == null) return;
