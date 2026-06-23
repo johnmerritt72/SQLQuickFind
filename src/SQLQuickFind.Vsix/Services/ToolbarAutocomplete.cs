@@ -626,6 +626,9 @@ namespace SQLQuickFind.Services
                 pkg.History?.Add(_textBox.Text);
                 _suppressTextChanged = true;
                 try { _textBox.Text = ""; } finally { _suppressTextChanged = false; }
+                // Keep the shell-side combo value in sync, or the shell repaints the box
+                // with a stale prior search after focus settles.
+                pkg.NotifyComboTextCleared();
                 _ = ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
                 {
                     try { await ObjectOpener.OpenAsync(active, entry); }
@@ -645,6 +648,8 @@ namespace SQLQuickFind.Services
                 if (pkg == null) return;
                 _suppressTextChanged = true;
                 try { _textBox.Text = ""; } finally { _suppressTextChanged = false; }
+                // Keep the shell-side combo value in sync (see NotifyComboTextCleared).
+                pkg.NotifyComboTextCleared();
                 pkg.RunEnterSearch(text);
             }
             catch { /* swallow */ }

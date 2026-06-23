@@ -156,6 +156,16 @@ namespace SQLQuickFind
             if (!string.IsNullOrWhiteSpace(text)) ExecuteSearch(text);
         }
 
+        // The WPF autocomplete popup commits a search by clearing the toolbar textbox
+        // directly, bypassing OnComboExecute. _currentText is the value the shell reads
+        // back to repaint the DynamicCombo, so it must be cleared too — otherwise the
+        // shell later resurrects a prior search into the box. See OnComboExecute Case 1.
+        internal void NotifyComboTextCleared()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            _currentText = "";
+        }
+
         // ---- Search execution ----
 
         private void ExecuteSearch(string text)

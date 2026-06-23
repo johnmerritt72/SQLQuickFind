@@ -26,7 +26,7 @@ namespace SQLQuickFind.Services
             }
 
             string text = BuildScriptText(entry.Db, ddl);
-            OpenInNewQueryWindow(text);
+            OpenInNewQueryWindow(text, entry.Db);
         }
 
         public static string BuildScriptText(string database, string rawDdl)
@@ -96,17 +96,41 @@ namespace SQLQuickFind.Services
             return null;
         }
 
-        private static void OpenInNewQueryWindow(string text)
+        private static void OpenInNewQueryWindow(string text, string database)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
             try
             {
                 var factory = ServiceCache.ScriptFactory;
                 if (factory == null) throw new InvalidOperationException("ScriptFactory unavailable.");
-                // Use the connection currently active in SSMS — the caller is responsible for ensuring
-                // a query window is connected to the right server. We supply the USE [db] header to
-                // protect against the connection's default DB being wrong.
-                factory.CreateNewBlankScript(ScriptType.Sql);
+
+                // Open the new query window already connected to the object's database so the database
+                // dropdown and IntelliSense bind to the right catalog. We clone the currently-active
+                // connection's UIConnectionInfo (leaving the live connection untouched) and override its
+                // DATABASE before creating the script. The USE [db] header remains as a fallback for
+                // execution context.
+                bool opened = false;
+                try
+                {
+                    var active = factory.CurrentlyActiveWndConnectionInfo?.UIConnectionInfo;
+                    if (active != null && !string.IsNullOrEmpty(database))
+                    {
+                        var ci = active.Copy();
+                        ci.AdvancedOptions["DATABASE"] = database;
+                        factory.CreateNewBlankScript(ScriptType.Sql, ci, null);
+                        opened = true;
+                    }
+                }
+                catch
+                {
+                    // Undocumented SSMS API surface — if the connection-bearing overload misbehaves,
+                    // degrade to a plain blank script (USE [db] header still sets the execution database).
+                    opened = false;
+                }
+
+                if (!opened)
+                    factory.CreateNewBlankScript(ScriptType.Sql);
+
                 var dte = SQLQuickFindPackage.Dte;
                 if (dte?.ActiveDocument?.Object("TextDocument") is EnvDTE.TextDocument td)
                 {
